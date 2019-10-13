@@ -30,10 +30,10 @@ attr key value = Attribute key (show value)
 --
 -- Create an SVG root element with a xmlns attribute and width and height.
 --
-svg :: Int -> Int -> [Node] -> Node
-svg width height = Node
+svg :: Int -> Int -> [Attribute] -> [Node] -> Node
+svg width height attrs = Node
   "svg"
-  [Attribute "xmlns" "http://www.w3.org/2000/svg", attr "width" size, attr "height" size]
+  ([Attribute "xmlns" "http://www.w3.org/2000/svg", attr "width" size, attr "height" size] ++ attrs)
 
 --
 -- Create an SVG group element.
@@ -111,7 +111,7 @@ unitCircle angle = Vector2 (cos angle) (sin angle)
 -- Points are located on a unit circle and can be scaled and transformed after.
 --
 polygon :: Int -> [Vector2]
-polygon num_sides = [unitCircle (theta (fromIntegral i)) | i <- [0..num_sides]]
+polygon num_sides = [unitCircle (theta (fromIntegral i)) | i <- [1..num_sides]]
   where
     theta :: Float -> Float
     theta index = index * 2 * pi / (fromIntegral num_sides)
@@ -119,6 +119,18 @@ polygon num_sides = [unitCircle (theta (fromIntegral i)) | i <- [0..num_sides]]
 --------------------------------------
 --              Lines               --
 --------------------------------------
+
+--
+-- Creates an SVG `path` node connecting all the vectors given.
+-- Paths are represented by a series of "commands":
+-- "Mx y" representing moving a "pen" to the given coordinates.
+-- "Lx y" representing drawing a line with the pen from the previous set of coordinates.
+--
+path :: [Vector2] -> Node
+path points = Node "path" [(Attribute "d" (d "M" points))] []
+  where
+    d command [] = " Z"
+    d command ((Vector2 x y):rest) = command ++ show x ++ " " ++ show y ++ d " L" rest
 
 --
 -- Creates an SVG `line` node from the first vector to the second vector
@@ -148,23 +160,22 @@ spurs origin (Vector2 offsetX offsetY) = [line origin (offset origin e) | e <- e
 randomPolygons :: Int -> Vector2 -> [Float] -> [Float] -> [Node]
 randomPolygons _ _ [] _ = []
 randomPolygons num_sides center (radius:rest) (r:s:rand) =
-  polyNode a ++ polyNode b ++ randomPolygons num_sides center rest rand
+  polyNode a : polyNode b : randomPolygons num_sides center rest rand
   where
     a = randomBetween (radius-5) (radius+5) r
     b = a + (randomBetween 3 10 s)
     scaleAndMove :: Float -> Vector2 -> Vector2
     scaleAndMove radius point = offset center (scale point radius)
-    polyNode :: Int -> [Node]
-    polyNode radius = buildLines (map (scaleAndMove (fromIntegral radius)) (polygon num_sides))
+    polyNode :: Int -> Node
+    polyNode radius = path (map (scaleAndMove (fromIntegral radius)) (polygon num_sides))
 
 
 snowflake :: Int -> Int -> [Float] -> Node
-snowflake size num_sides (r:s:rest) =
-  svg size size back_layer
+snowflake size num_sides rand =
+  svg size size [Attribute "fill" "none", Attribute "stroke" "black"] back_layer
   where
     polygonRadii = map (* (half size)) [0.15, 0.365, 0.42, 0.47]
-    moveToCenter = offset (center size size)
-    back_layer = buildLines [moveToCenter (scale p 2.0) | p <- polygon num_sides]
+    back_layer = randomPolygons num_sides (center size size) polygonRadii rand
 
 --------------------------------------
 
@@ -311,10 +322,6 @@ main = do
   seed <- randomRIO (0, 100000 :: Int)
   let randomValues = randomList seed
 
-  let prefix = "<svg xmlns=\"http://www.w3.org/2000/svg\" " ++
-               "width=\"" ++ (show size) ++
-               "\" height=\"" ++ (show size) ++ "\">"
-      image = snd (mondrian 0 0 size size randomValues)
-      suffix = "</svg>"
+  let node = snowflake 384 6 randomValues
 
-  writeFile "snowflake.svg" (prefix ++ image ++ suffix)
+  writeFile "snowflake.svg" (showNode node)
