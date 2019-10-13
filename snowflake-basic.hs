@@ -88,11 +88,16 @@ scale :: Vector2 -> Float -> Vector2
 scale (Vector2 x y) scalar = Vector2 (scalar * x) (scalar * y)
 
 --
+-- Divide an integer by an integer and get a float
+--
+divToFloat :: (Integral a) => a -> a -> Float
+divToFloat = (/) `on` fromIntegral
+
+--
 -- Slice an integer in two.
 --
 half :: (Integral a) => a -> Float
 half x = x `divToFloat` 2
-  where divToFloat = (/) `on` fromIntegral
 
 --
 -- Returns a point representing the center of a rectangle of some width and height.
@@ -110,8 +115,8 @@ unitCircle angle = Vector2 (cos angle) (sin angle)
 -- Gets a list of points needed to create a polygon with n sides.
 -- Points are located on a unit circle and can be scaled and transformed after.
 --
-polygon :: Int -> [Vector2]
-polygon num_sides = [unitCircle (theta (fromIntegral i)) | i <- [1..num_sides]]
+polygonPoints :: Int -> [Vector2]
+polygonPoints num_sides = [unitCircle (theta (fromIntegral i)) | i <- [1..num_sides]]
   where
     theta :: Float -> Float
     theta index = index * 2 * pi / (fromIntegral num_sides)
@@ -119,6 +124,28 @@ polygon num_sides = [unitCircle (theta (fromIntegral i)) | i <- [1..num_sides]]
 --------------------------------------
 --              Lines               --
 --------------------------------------
+
+--
+-- Creates a string of SVG points for a polygon or polyline.
+--
+svgPoints :: [Vector2] -> Attribute
+svgPoints (h:t) = Attribute "points" (showPoint h ++ showPoints t)
+  where
+    showPoint (Vector2 x y) = show x ++ "," ++ show y
+    showPoints [] = ""
+    showPoints (h:t) =  " " ++ showPoint h ++ showPoints t
+
+--
+-- Creates a SVG `polyline` node that draws a line connecting all the points.
+--
+polyline :: [Vector2] -> Node
+polyline points = Node "polyline" [svgPoints points] []
+
+--
+-- Creates a SVG `polygon` node that draws a self-closing line connecting all the points
+--
+polygon :: [Vector2] -> Node
+polygon points = Node "polygon" [svgPoints points] []
 
 --
 -- Creates an SVG `path` node connecting all the vectors given.
@@ -146,16 +173,32 @@ buildLines :: [Vector2] -> [Node]
 buildLines points = [line one two | (one, two) <- zip points (tail points)]
 
 --
--- Returns two `line` nodes that extend from origin to the given offset,
+-- Returns `polyline` node representing two lines that extend from origin to the given offset,
 -- mirrored on the Y axis.
 --
-spurs :: Vector2 -> Vector2 -> [Node]
-spurs origin (Vector2 offsetX offsetY) = [line origin (offset origin e) | e <- endpoints]
-  where endpoints = [Vector2 (offsetX * x) offsetY | x <- [-1, 1]]
+spurs :: Vector2 -> Vector2 -> Node
+spurs origin (Vector2 offsetX offsetY) = polyline points
+  where
+    endpoint x = offset origin (Vector2 (offsetX * x) offsetY)
+    points = [endpoint (-1), origin, endpoint 1]
 
 --------------------------------------
 --           Snowflakes             --
 --------------------------------------
+
+snowflakePolygon :: Int -> Vector2 -> Float -> Node
+snowflakePolygon num_sides center radius =
+  polygon [offset center (scale point radius) | point <- polygonPoints num_sides]
+
+snowflakeSpoke :: Vector2 -> Float -> Node
+snowflakeSpoke (Vector2 centerX centerY) deg = Node
+  "g"
+  [Attribute "transform" rotate]
+  (mainLine : spurLines)
+  where
+    rotate = "rotate(" ++ show deg ++ "," ++ show centerX ++ "," ++ show centerY ++ ")"
+    mainLine = line (Vector2 centerX 0) (Vector2 centerX centerY)
+    spurLines = [spurs (Vector2 centerX 90) (Vector2 5 (-10))]
 
 randomPolygons :: Int -> Vector2 -> [Float] -> [Float] -> [Node]
 randomPolygons _ _ [] _ = []
@@ -164,18 +207,20 @@ randomPolygons num_sides center (radius:rest) (r:s:rand) =
   where
     a = randomBetween (radius-5) (radius+5) r
     b = a + (randomBetween 3 10 s)
-    scaleAndMove :: Float -> Vector2 -> Vector2
-    scaleAndMove radius point = offset center (scale point radius)
     polyNode :: Int -> Node
-    polyNode radius = path (map (scaleAndMove (fromIntegral radius)) (polygon num_sides))
+    polyNode radius = snowflakePolygon num_sides center (fromIntegral radius)
 
 
 snowflake :: Int -> Int -> [Float] -> Node
 snowflake size num_sides rand =
-  svg size size [Attribute "fill" "none", Attribute "stroke" "black"] back_layer
+  svg size size [Attribute "fill" "none", Attribute "stroke" "black"] (spokes ++ back_layer)
   where
+    centerPoint = center size size
     polygonRadii = map (* (half size)) [0.15, 0.365, 0.42, 0.47]
-    back_layer = randomPolygons num_sides (center size size) polygonRadii rand
+    spokeTurnAmount = 360 `divToFloat` num_sides
+    spokeAngles = [90 + (fromIntegral i * spokeTurnAmount) | i <- [1..num_sides]]
+    spokes = map (snowflakeSpoke centerPoint) spokeAngles
+    back_layer = randomPolygons num_sides centerPoint polygonRadii rand
 
 --------------------------------------
 
