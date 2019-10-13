@@ -137,7 +137,7 @@ multiSpoke();
 rotateFromCenter(cxt, Math.PI / numberOfSides);
 
 // Draw 4 random hexagons
-randomHexagon(30);
-randomHexagon(70);
-randomHexagon(80);
-randomHexagon(90);
+randomHexagon(30); // 30 / 192 = 0.15625
+randomHexagon(70); // 70 / 192 = 0.36458333333
+randomHexagon(80); // 80 / 192 = 0.41666666667
+randomHexagon(90); // 90 / 192 = 0.46875
