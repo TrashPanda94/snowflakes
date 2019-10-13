@@ -69,11 +69,11 @@ mondrian x y w h (r:s:rest)
   | hs && vs           = b_split x y w h rest
   | hs                 = h_split x y w h rest
   | vs                 = v_split x y w h rest
-  | otherwise = (s:rest, "<rect x=" ++ (show x) ++
-                         " y=" ++ (show y) ++
-                         " width=" ++ (show w) ++
-                         " height=" ++ (show h) ++
-                         " stroke=\"black\" stroke-width=\"3\" fill=\"" ++
+  | otherwise = (s:rest, "<rect x=\"" ++ (show x) ++
+                         "\" y=\"" ++ (show y) ++
+                         "\" width=\"" ++ (show w) ++
+                         "\" height=\"" ++ (show h) ++
+                         "\" stroke=\"black\" stroke-width=\"3\" fill=\"" ++
                          (randomColor r) ++
                          "\" />\n")
   where
@@ -134,7 +134,7 @@ randomColor rval
   | otherwise                    = "white"
 
 --
--- The main program which generates and outputs mondrian.html.
+-- The main program which generates and outputs mondrian.svg.
 --
 main :: IO ()
 main = do
@@ -146,10 +146,10 @@ main = do
   seed <- randomRIO (0, 100000 :: Int)
   let randomValues = randomList seed
 
-  let prefix = "<html><head></head><body>\n" ++
-               "<svg width=\"" ++ (show width) ++
+  let prefix = "<svg xmlns=\"http://www.w3.org/2000/svg\" " ++
+               "width=\"" ++ (show width) ++
                "\" height=\"" ++ (show height) ++ "\">"
       image = snd (mondrian 0 0 width height randomValues)
-      suffix = "</svg>\n</html>"
+      suffix = "</svg>"
 
-  writeFile "mondrian.html" (prefix ++ image ++ suffix)
+  writeFile "mondrian.svg" (prefix ++ image ++ suffix)
