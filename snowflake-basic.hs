@@ -13,11 +13,8 @@ import System.Random (randomRIO, StdGen, randomR, mkStdGen)
 --
 -- The width and height of the image being generated.
 --
-width :: Int
-width = 1024
-
-height :: Int
-height = 768
+size :: Int
+size = 384
 
 --
 -- Other constants used during the generation of the image
@@ -27,11 +24,10 @@ split_penalty = 1.5 :: Float
 fill_prob = 0.25 :: Float
 
 --
--- Generate and return a list of 20000 random floating point numbers between
--- 0 and 1.  (Increase the 20000 if you ever run out of random values).
+-- Generate and return a list of random floating point numbers between 0 and 1.
 --
 randomList :: Int -> [Float]
-randomList seed = take 20000 (rl_helper (mkStdGen seed))
+randomList seed = (rl_helper (mkStdGen seed))
 
 rl_helper :: StdGen -> [Float]
 rl_helper g = fst vg : rl_helper (snd vg)
@@ -62,10 +58,10 @@ mondrian :: Int -> Int -> Int -> Int -> [Float] -> ([Float], String)
 mondrian _ _ 0 _ rvals = (rvals, "")
 mondrian _ _ _ 0 rvals = (rvals, "")
 mondrian x y w h (r:s:rest)
-  | w > width `div` 2 &&
-    h > height `div` 2 = b_split x y w h (r:s:rest)
-  | w > width `div` 2  = h_split x y w h (r:s:rest)
-  | h > height `div` 2 = v_split x y w h (r:s:rest)
+  | w > size `div` 2 &&
+    h > size `div` 2 = b_split x y w h (r:s:rest)
+  | w > size `div` 2  = h_split x y w h (r:s:rest)
+  | h > size `div` 2 = v_split x y w h (r:s:rest)
   | hs && vs           = b_split x y w h rest
   | hs                 = h_split x y w h rest
   | vs                 = v_split x y w h rest
@@ -147,9 +143,9 @@ main = do
   let randomValues = randomList seed
 
   let prefix = "<svg xmlns=\"http://www.w3.org/2000/svg\" " ++
-               "width=\"" ++ (show width) ++
-               "\" height=\"" ++ (show height) ++ "\">"
-      image = snd (mondrian 0 0 width height randomValues)
+               "width=\"" ++ (show size) ++
+               "\" height=\"" ++ (show size) ++ "\">"
+      image = snd (mondrian 0 0 size size randomValues)
       suffix = "</svg>"
 
   writeFile "snowflake.svg" (prefix ++ image ++ suffix)
