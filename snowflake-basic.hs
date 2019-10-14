@@ -33,7 +33,7 @@ attr key value = Attribute key (show value)
 svg :: Int -> Int -> [Attribute] -> [Node] -> Node
 svg width height attrs = Node
   "svg"
-  ([Attribute "xmlns" "http://www.w3.org/2000/svg", attr "width" size, attr "height" size] ++ attrs)
+  ([Attribute "xmlns" "http://www.w3.org/2000/svg", Attribute "viewBox" ("0 0 " ++ show width ++ " " ++ show height)] ++ attrs)
 
 --
 -- Create an SVG group element.
@@ -182,191 +182,101 @@ spurs origin (Vector2 offsetX offsetY) = polyline points
     endpoint x = offset origin (Vector2 (offsetX * x) offsetY)
     points = [endpoint (-1), origin, endpoint 1]
 
+--
+-- Creates a transform attribute that rotates by `deg` degrees
+-- around in the given origin.
+--
+rotate :: (Show a, Num a) => a -> Vector2 -> Attribute
+rotate deg (Vector2 centerX centerY) =
+  Attribute "transform" ("rotate(" ++ show deg ++ "," ++ show centerX ++ "," ++ show centerY ++ ")")
+
 --------------------------------------
 --           Snowflakes             --
 --------------------------------------
 
+--
+-- Generates a polygon node for a snowflake
+--
 snowflakePolygon :: Int -> Vector2 -> Float -> Node
 snowflakePolygon num_sides center radius =
   polygon [offset center (scale point radius) | point <- polygonPoints num_sides]
 
-snowflakeSpoke :: Vector2 -> Float -> Node
-snowflakeSpoke (Vector2 centerX centerY) deg = Node
-  "g"
-  [Attribute "transform" rotate]
-  (mainLine : spurLines)
-  where
-    rotate = "rotate(" ++ show deg ++ "," ++ show centerX ++ "," ++ show centerY ++ ")"
-    mainLine = line (Vector2 centerX 0) (Vector2 centerX centerY)
-    spurLines = [spurs (Vector2 centerX 90) (Vector2 5 (-10))]
+--
+-- Generates a spur node for a snowflake
+--
+snowflakeSpur :: Vector2 -> (Float, Float) -> (Float, Float) -> (Float, Float) -> IO Node
+snowflakeSpur (Vector2 centerX centerY) start length spread = do
+  sStart <- randomRIO start
+  sLength <- randomRIO length
+  sSpread <- randomRIO spread
+  return (spurs (Vector2 centerX sStart) (Vector2 sSpread (sLength * (-1))))
 
-randomPolygons :: Int -> Vector2 -> [Float] -> [Float] -> [Node]
-randomPolygons _ _ [] _ = []
-randomPolygons num_sides center (radius:rest) (r:s:rand) =
-  polyNode a : polyNode b : randomPolygons num_sides center rest rand
+--
+-- Generates a spoke node for a snowflake, along with its spurs
+--
+snowflakeSpoke :: Vector2 -> Float -> IO Node
+snowflakeSpoke (Vector2 centerX centerY) deg = do
+  a <- spur (145,150) (50,55) (40,50)
+  b <- spur (130,135) (35,40) (20,30)
+  c <- spur (90,100) (25,35) (15,20)
+  d <- spur (65,70) (10,20) (5,10)
+  e <- spur (30,35) (15,20) (5,7)
+  return (group [rotate deg center] [mainLine, a, b, c, d, e])
   where
-    a = randomBetween (radius-5) (radius+5) r
-    b = a + (randomBetween 3 10 s)
-    polyNode :: Int -> Node
-    polyNode radius = snowflakePolygon num_sides center (fromIntegral radius)
+    center = (Vector2 centerX centerY)
+    spur = snowflakeSpur center
+    mainLine = line (Vector2 centerX 0) center
 
-
-snowflake :: Int -> Int -> [Float] -> Node
-snowflake size num_sides rand =
-  svg size size [Attribute "fill" "none", Attribute "stroke" "black"] (spokes ++ back_layer)
+--
+-- Generates multiple polygons for the background of a snowflake.
+-- Polygon sizes are slightly randomized.
+--
+randomPolygons :: Int -> Vector2 -> IO Node
+randomPolygons num_sides (Vector2 centerX centerY) = do
+  (a,b) <- randomPolygon 30
+  (c,d) <- randomPolygon 70
+  (e,f) <- randomPolygon 90
+  (g,h) <- randomPolygon 110
+  return (group [] [a,b,c,d,e,f,g,h])
   where
+    center = Vector2 centerX centerY
+    randomPolygon radius = do
+      a <- randomRIO (radius-5, radius+5 :: Float)
+      b <- randomRIO (3, 10 :: Float)
+      return (polyNode a, polyNode (a + b))
+      where polyNode = snowflakePolygon num_sides center
+
+--
+-- Generates an SVG image of a snowflake.
+-- The snowflake is represented using multiple polygons and paths
+-- that are randomly generated.
+-- The number of branches coming out of the snowflake can be configured by `num_sides`.
+--
+snowflake :: Int -> Int -> IO Node
+snowflake num_sides = do
+  back_layer <- randomPolygons num_sides centerPoint
+  spoke_groups <- spokes spokeAngles
+  return (svg size size attrs (spoke_groups ++ back_layer))
+  where
+    size = 384
+    attrs = [Attribute "fill" "none", Attribute "stroke" "black", attr "stroke-width" 2]
     centerPoint = center size size
-    polygonRadii = map (* (half size)) [0.15, 0.365, 0.42, 0.47]
     spokeTurnAmount = 360 `divToFloat` num_sides
     spokeAngles = [90 + (fromIntegral i * spokeTurnAmount) | i <- [1..num_sides]]
-    spokes = map (snowflakeSpoke centerPoint) spokeAngles
-    back_layer = randomPolygons num_sides centerPoint polygonRadii rand
+    spokes :: [Float] -> IO [Node]
+    spokes [] = do
+      return []
+    spokes (h:t) = do
+      spoke <- snowflakeSpoke centerPoint h
+      mapped <- spokes t
+      return (spoke : mapped)
 
 --------------------------------------
 
 --
--- The width and height of the image being generated.
---
-size :: Int
-size = 384
-
---
--- Other constants used during the generation of the image
---
-split_low = 120 :: Int
-split_penalty = 1.5 :: Float
-fill_prob = 0.25 :: Float
-
---------------------------------------
---             Random               --
---------------------------------------
-
---
--- Generate and return a list of random floating point numbers between 0 and 1.
---
-randomList :: Int -> [Float]
-randomList seed = rl_helper (mkStdGen seed)
-  where
-    rl_helper :: StdGen -> [Float]
-    rl_helper g = fst vg : rl_helper (snd vg)
-      where vg = randomR (0.0, 1.0 :: Float) g
-
---
--- Compute an integer between low and high from a (presumably random) floating
--- point number between 0 and 1.
---
-randomInt :: Int -> Int -> Float -> Int
-randomInt low high x = round ((fromIntegral (high - low) * x) + fromIntegral low)
-
---
--- Compute an integer between low and high from a (presumably random) floating
--- point number between 0 and 1.
---
-randomBetween :: (Real a) => a -> a -> Float -> Int
-randomBetween low high x = round ((realToFrac (high - low) * x) + realToFrac low)
-
---
--- Generate the tag for a rectangle with random color.  Replace the
--- implementation of this function so that it generates all of the tags
--- needed for a piece of random Mondrian art.
---
--- Parameters:
---   x, y: The upper left corner of the region
---   w, h: The width and height of the region
---   r:s:rest: A list of random floating point values between 0 and 1
---
--- Returns:
---   [Float]: The remaining, unused random values
---   String: The SVG tags that draw the image
---
-mondrian :: Int -> Int -> Int -> Int -> [Float] -> ([Float], String)
-mondrian _ _ 0 _ rvals = (rvals, "")
-mondrian _ _ _ 0 rvals = (rvals, "")
-mondrian x y w h (r:s:rest)
-  | w > size `div` 2 &&
-    h > size `div` 2 = b_split x y w h (r:s:rest)
-  | w > size `div` 2  = h_split x y w h (r:s:rest)
-  | h > size `div` 2 = v_split x y w h (r:s:rest)
-  | hs && vs           = b_split x y w h rest
-  | hs                 = h_split x y w h rest
-  | vs                 = v_split x y w h rest
-  | otherwise = (s:rest, "<rect x=\"" ++ (show x) ++
-                         "\" y=\"" ++ (show y) ++
-                         "\" width=\"" ++ (show w) ++
-                         "\" height=\"" ++ (show h) ++
-                         "\" stroke=\"black\" stroke-width=\"3\" fill=\"" ++
-                         (randomColor r) ++
-                         "\" />\n")
-  where
-    rand1 = randomInt split_low (round (fromIntegral w * split_penalty)) r
-    hs = if rand1 < w then True else False
-    rand2 = randomInt split_low (round (fromIntegral h * split_penalty)) s
-    vs = if rand2 < h then True else False
-
---
---  Split the region both horizontally and vertically
---
-b_split :: Int -> Int -> Int -> Int -> [Float] -> ([Float], String)
-b_split x y w h (r:s:rest) = (rest4, s1 ++ s2 ++ s3 ++ s4)
-  where
-    h_rand = randomInt 33 67 r
-    v_rand = randomInt 33 67 s
-    lw = (fromIntegral w * h_rand `div` 100)
-    rw = (fromIntegral w - lw)
-    th = (fromIntegral h * v_rand `div` 100)
-    bh = (fromIntegral h - th)
-    (rest1, s1) = mondrian x y lw th rest
-    (rest2, s2) = mondrian (x + lw) y rw th rest1
-    (rest3, s3) = mondrian x (y + th) lw bh rest2
-    (rest4, s4) = mondrian (x + lw) (y + th) rw bh rest3
-
---
---  Split the region horizontally so that we get two that are side by side
---
-h_split :: Int -> Int -> Int -> Int -> [Float] -> ([Float], String)
-h_split x y w h (r:rest) = (rest2, s1 ++ s2)
-  where
-    h_rand = randomInt 33 67 r
-    lw = (fromIntegral w * h_rand `div` 100)
-    rw = (fromIntegral w - lw)
-    (rest1, s1) = mondrian x y lw h rest
-    (rest2, s2) = mondrian (x + lw) y rw h rest1
-
---
---  Split the region vertically so that we get one on top the other
---
-v_split :: Int -> Int -> Int -> Int -> [Float] -> ([Float], String)
-v_split x y w h (r:rest) = (rest2, s1 ++ s2)
-  where
-    v_rand = randomInt 33 67 r
-    th = (fromIntegral h * v_rand `div` 100)
-    bh = (fromIntegral h - th)
-    (rest1, s1) = mondrian x y w th rest
-    (rest2, s2) = mondrian x (y + th) w bh rest1
-
---
---  Select the random fill color for the region
---
-randomColor :: Float -> String
-randomColor rval
-  | rval < 1.0 * fill_prob / 3.0 = "red"
-  | rval < 2.0 * fill_prob / 3.0 = "skyblue"
-  | rval < 3.0 * fill_prob / 3.0 = "yellow"
-  | otherwise                    = "white"
-
---
--- The main program which generates and outputs mondrian.html.
+-- The main program which generates and outputs snowflake.svg
 --
 main :: IO ()
 main = do
-  --  Right now, the program will generate a different sequence of random
-  --  numbers each time it is run.  If you want the same sequence each time
-  --  use "let seed = 0" instead of "seed <- randomRIO (0, 100000 :: Int)"
-
-  --let seed = 0
-  seed <- randomRIO (0, 100000 :: Int)
-  let randomValues = randomList seed
-
-  let node = snowflake 384 6 randomValues
-
+  node <- snowflake 6
   writeFile "snowflake.svg" (showNode node)
