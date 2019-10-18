@@ -4,6 +4,7 @@
 import System.IO
 import Control.Monad (replicateM)
 import System.Random (randomRIO, StdGen, randomR, mkStdGen)
+import Data.Char (isDigit)
 import Data.List (intercalate)
 import Data.Function (on)
 
@@ -139,13 +140,13 @@ svgPoints (h:t) = Attribute "points" (showPoint h ++ showPoints t)
 -- Creates a SVG `polyline` node that draws a line connecting all the points.
 --
 polyline :: [Vector2] -> Node
-polyline points = Node "polyline" [svgPoints points] []
+polyline points = Node "polyline" [Attribute "fill" "none", svgPoints points] []
 
 --
 -- Creates a SVG `polygon` node that draws a self-closing line connecting all the points
 --
 polygon :: [Vector2] -> Node
-polygon points = Node "polygon" [svgPoints points] []
+polygon points = Node "polygon" [Attribute "fill" "none", svgPoints points] []
 
 --
 -- Creates an SVG `path` node connecting all the vectors given.
@@ -252,14 +253,14 @@ randomPolygons num_sides (Vector2 centerX centerY) = do
 -- that are randomly generated.
 -- The number of branches coming out of the snowflake can be configured by `num_sides`.
 --
-snowflake :: Int -> Int -> IO Node
-snowflake num_sides = do
+snowflake :: Int -> String -> IO Node
+snowflake num_sides color = do
   back_layer <- randomPolygons num_sides centerPoint
   spoke_groups <- spokes spokeAngles
-  return (svg size size attrs (spoke_groups ++ back_layer))
+  return (svg size size attrs (back_layer : spoke_groups))
   where
     size = 384
-    attrs = [Attribute "fill" "none", Attribute "stroke" "black", attr "stroke-width" 2]
+    attrs = [Attribute "fill" "none", Attribute "stroke" color, attr "stroke-width" 2]
     centerPoint = center size size
     spokeTurnAmount = 360 `divToFloat` num_sides
     spokeAngles = [90 + (fromIntegral i * spokeTurnAmount) | i <- [1..num_sides]]
@@ -272,11 +273,68 @@ snowflake num_sides = do
       return (spoke : mapped)
 
 --------------------------------------
+--             Prompts              --
+--------------------------------------
+
+--
+-- Displays a question to the user and validates the result.
+--
+prompt :: String -> (String -> Bool) -> IO String
+prompt question valid = do
+  putStrLn(question)
+  reply <- getLine
+  if (valid reply) 
+    then return reply
+    else do
+      putStrLn("Invalid entry. Please try again!")
+      prompt question valid
+
+--
+-- Checks that a color is one of a few valid SVG colors.
+--      
+isValidColor :: String -> Bool
+isValidColor color = 
+  elem color 
+  ["indianred","lightcoral","salmon","crimson","red"
+  ,"darkred","pink","lightpink","hotpink","deeppink","mediumvioletred","palevioletred"
+  ,"lightsalmon","coral","tomato","orangered","darkorange","orange"
+  ,"gold","yellow","moccasin","peachpuff","palegoldenrod","khaki"
+  ,"plum","violet","fuchsia","mediumorchid","blueviolet","purple"
+  ,"chatreuse","limegreen","mediumseagreen","forestgreen","darkgreen","darkcyan"
+  ,"aqua","steelblue","deepskyblue","blue","navy","turquoise"
+  ,"burlywood","sandybrown","darkgoldenrod","saddlebrown","brown","goldenrod"
+  ,"white","honeydew","aliceblue","seashell","beige","mistyrose"
+  ,"gainsboro","silver","gray","lightslategray","darkslategrey", "gray", "black"]
+
+--
+-- Checks that every item in a list is True.
+--  
+every :: [Bool] -> Bool
+every lst = foldr (&&) True lst
+
+--
+-- Checks that a string represents a number.
+--
+isInt :: String -> Bool
+isInt str = every (map isDigit str)
+
+--------------------------------------
 
 --
 -- The main program which generates and outputs snowflake.svg
 --
 main :: IO ()
 main = do
-  node <- snowflake 6
+
+  -- Number of sides of snowflake
+  num_sides_str <- prompt 
+    "How many sides does your snowflake have? (Enter a number at least 3)"
+    (\ x -> every [isInt x, (read x :: Int) > 2])
+  -- Converts String to Int
+  let num_sides = read num_sides_str :: Int
+
+  -- Color of snowflake
+  color <- prompt "What color is your snowflake?" isValidColor
+  
+  node <- snowflake num_sides color
   writeFile "snowflake.svg" (showNode node)
