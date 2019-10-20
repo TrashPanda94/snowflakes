@@ -21,8 +21,7 @@ instance Show Attribute where
   --
   -- Converts an attribute into a SVG string.
   --
-  show (Attribute key val) =
-    key ++ ('=' : show val)
+  show (Attribute key val) = key ++ ('=' : show val)
 
 --
 -- Represents a SVG/XML node with a name, attributes, and child nodes.
@@ -41,10 +40,13 @@ instance Show Node where
   --   "<g><rect x=\"10\" y=\"0\" /></g>"
   --
   show (Node name attributes children) =
-    "<" ++ name ++ " " ++ (intercalate " " (map show attributes)) ++ suffix children
+    "<" ++ name ++ (attributesString attributes) ++ suffix children
     where
-        suffix [] = " />"
-        suffix children = ">\n" ++ (intercalate "\n" (map show children)) ++ "\n</" ++ name ++ ">"
+      attributesString :: [Attribute] -> String
+      attributesString = foldr (\ a str -> (' ' : show a) ++ str) ""
+      suffix :: [Node] -> String
+      suffix [] = " />"
+      suffix children = ">\n" ++ (intercalate "\n" (map show children)) ++ "\n</" ++ name ++ ">"
 
 --
 -- Create a new attribute from a showable value
@@ -66,6 +68,12 @@ svg width height attrs = Node
 group :: [Attribute] -> [Node] -> Node
 group = Node "g"
 
+--
+-- Attribute to remove fill from element.
+--
+noFill :: Attribute
+noFill = Attribute "fill" "none"
+
 
 --------------------------------------
 --             Vector2              --
@@ -75,7 +83,12 @@ group = Node "g"
 -- Data type for point in 2D space.
 --
 data Vector2 = Vector2 Float Float
-  deriving (Show)
+
+instance Show Vector2 where
+  --
+  -- Converts a Vector2 into a "x,y" string.
+  --
+  show (Vector2 x y) = (show x) ++ "," ++ (show y)
 
 --
 -- Add two vectors together.
@@ -131,23 +144,19 @@ polygonPoints num_sides = [unitCircle (theta (fromIntegral i)) | i <- [1..num_si
 -- Creates a string of SVG points for a polygon or polyline.
 --
 svgPoints :: [Vector2] -> Attribute
-svgPoints (h:t) = Attribute "points" (showPoint h ++ showPoints t)
-  where
-    showPoint (Vector2 x y) = show x ++ "," ++ show y
-    showPoints [] = ""
-    showPoints (h:t) =  " " ++ showPoint h ++ showPoints t
+svgPoints points = Attribute "points" (intercalate " " (map show points))
 
 --
 -- Creates a SVG `polyline` node that draws a line connecting all the points.
 --
 polyline :: [Vector2] -> Node
-polyline points = Node "polyline" [Attribute "fill" "none", svgPoints points] []
+polyline points = Node "polyline" [noFill, svgPoints points] []
 
 --
 -- Creates a SVG `polygon` node that draws a self-closing line connecting all the points
 --
 polygon :: [Vector2] -> Node
-polygon points = Node "polygon" [Attribute "fill" "none", svgPoints points] []
+polygon points = Node "polygon" [noFill, svgPoints points] []
 
 --
 -- Creates an SVG `path` node connecting all the vectors given.
@@ -189,8 +198,8 @@ spurs origin (Vector2 offsetX offsetY) = polyline points
 -- around in the given origin.
 --
 rotate :: (Show a, Num a) => a -> Vector2 -> Attribute
-rotate deg (Vector2 centerX centerY) =
-  Attribute "transform" ("rotate(" ++ show deg ++ "," ++ show centerX ++ "," ++ show centerY ++ ")")
+rotate deg center =
+  Attribute "transform" ("rotate(" ++ show deg ++ "," ++ show center ++ ")")
 
 --------------------------------------
 --           Snowflakes             --
@@ -211,7 +220,7 @@ snowflakeSpur (Vector2 centerX centerY) start length spread = do
   sStart <- randomRIO start
   sLength <- randomRIO length
   sSpread <- randomRIO spread
-  return (spurs (Vector2 centerX sStart) (Vector2 sSpread (sLength * (-1))))
+  return (spurs (Vector2 centerX sStart) (Vector2 sSpread (negate sLength)))
 
 --
 -- Generates a spoke node for a snowflake, along with its spurs
@@ -261,13 +270,12 @@ snowflake num_sides color = do
   return (svg size size attrs (back_layer : spoke_groups))
   where
     size = 384
-    attrs = [Attribute "fill" "none", Attribute "stroke" color, attr "stroke-width" 2]
+    attrs = [noFill, Attribute "stroke" color, attr "stroke-width" 2]
     centerPoint = center size size
     spokeTurnAmount = 360 `divToFloat` num_sides
     spokeAngles = [90 + (fromIntegral i * spokeTurnAmount) | i <- [1..num_sides]]
     spokes :: [Float] -> IO [Node]
-    spokes [] = do
-      return []
+    spokes [] = return []
     spokes (h:t) = do
       spoke <- snowflakeSpoke centerPoint h
       mapped <- spokes t
@@ -311,13 +319,14 @@ isValidColor color =
 -- Checks that every item in a list is True.
 --
 every :: [Bool] -> Bool
-every lst = foldr (&&) True lst
+every = foldr (&&) True
 
 --
--- Checks that a string represents a number.
+-- Tries to convert a string to a number.
 --
-isInt :: String -> Bool
-isInt str = every (map isDigit str)
+toIntegral :: (Read b, Integral b) => String -> Maybe b
+toIntegral str = if (isIntegral str) then Just (read str) else Nothing
+  where isIntegral str = every (map isDigit str)
 
 --------------------------------------
 
@@ -330,9 +339,9 @@ main = do
   -- Number of sides of snowflake
   num_sides_str <- prompt
     "How many sides does your snowflake have? (Enter a number at least 3)"
-    (\ x -> every [isInt x, (read x :: Int) > 2])
+    (\ x -> maybe False (> 2) (toIntegral x))
   -- Converts String to Int
-  let num_sides = read num_sides_str :: Int
+  let (Just num_sides) = toIntegral num_sides_str
 
   -- Color of snowflake
   color <- prompt "What color is your snowflake?" isValidColor
