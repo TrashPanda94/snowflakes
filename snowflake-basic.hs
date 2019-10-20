@@ -17,10 +17,34 @@ import Data.Function (on)
 --
 data Attribute = Attribute String String
 
+instance Show Attribute where
+  --
+  -- Converts an attribute into a SVG string.
+  --
+  show (Attribute key val) =
+    key ++ ('=' : show val)
+
 --
 -- Represents a SVG/XML node with a name, attributes, and child nodes.
 --
 data Node = Node String [Attribute] [Node]
+
+instance Show Node where
+  --
+  -- Creates an svg tag with a given name and list of attributes.
+  --
+  -- Examples:
+  -- rect = Node "rect" [(Attribute "x" "10"),(Attribute "y" "0")] []
+  -- show rect == "<rect x=\"10\" y=\"0\" />"
+  --
+  -- show (Node "g" [] [rect]) ==
+  --   "<g><rect x=\"10\" y=\"0\" /></g>"
+  --
+  show (Node name attributes children) =
+    "<" ++ name ++ " " ++ (intercalate " " (map show attributes)) ++ suffix children
+    where
+        suffix [] = " />"
+        suffix children = ">\n" ++ (intercalate "\n" (map show children)) ++ "\n</" ++ name ++ ">"
 
 --
 -- Create a new attribute from a showable value
@@ -42,29 +66,6 @@ svg width height attrs = Node
 group :: [Attribute] -> [Node] -> Node
 group = Node "g"
 
---
--- Converts an attribute into a SVG string.
---
-showAttribute :: Attribute -> String
-showAttribute (Attribute key val) =
-    key ++ ('=' : show val)
-
---
--- Creates an svg tag with a given name and list of attributes.
---
--- Examples:
--- rect = Node "rect" [(Attribute "x" "10"),(Attribute "y" "0")] []
--- showNode rect == "<rect x=\"10\" y=\"0\" />"
---
--- showNode (Node "g" [] [rect]) ==
---   "<g><rect x=\"10\" y=\"0\" /></g>"
---
-showNode :: Node -> String
-showNode (Node name attributes children) =
-    "<" ++ name ++ " " ++ (intercalate " " (map showAttribute attributes)) ++ suffix children
-    where
-        suffix [] = " />"
-        suffix children = ">\n" ++ (intercalate "\n" (map showNode children)) ++ "\n</" ++ name ++ ">"
 
 --------------------------------------
 --             Vector2              --
@@ -283,7 +284,7 @@ prompt :: String -> (String -> Bool) -> IO String
 prompt question valid = do
   putStrLn(question)
   reply <- getLine
-  if (valid reply) 
+  if (valid reply)
     then return reply
     else do
       putStrLn("Invalid entry. Please try again!")
@@ -291,10 +292,10 @@ prompt question valid = do
 
 --
 -- Checks that a color is one of a few valid SVG colors.
---      
+--
 isValidColor :: String -> Bool
-isValidColor color = 
-  elem color 
+isValidColor color =
+  elem color
   ["indianred","lightcoral","salmon","crimson","red"
   ,"darkred","pink","lightpink","hotpink","deeppink","mediumvioletred","palevioletred"
   ,"lightsalmon","coral","tomato","orangered","darkorange","orange"
@@ -308,7 +309,7 @@ isValidColor color =
 
 --
 -- Checks that every item in a list is True.
---  
+--
 every :: [Bool] -> Bool
 every lst = foldr (&&) True lst
 
@@ -327,7 +328,7 @@ main :: IO ()
 main = do
 
   -- Number of sides of snowflake
-  num_sides_str <- prompt 
+  num_sides_str <- prompt
     "How many sides does your snowflake have? (Enter a number at least 3)"
     (\ x -> every [isInt x, (read x :: Int) > 2])
   -- Converts String to Int
@@ -335,6 +336,6 @@ main = do
 
   -- Color of snowflake
   color <- prompt "What color is your snowflake?" isValidColor
-  
+
   node <- snowflake num_sides color
-  writeFile "snowflake.svg" (showNode node)
+  writeFile "snowflake.svg" (show node)
