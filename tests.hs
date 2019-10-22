@@ -1,3 +1,4 @@
+-- Vector2 Test
 import System.IO
 import Control.Monad (replicateM)
 --import System.Random (randomRIO, StdGen, randomR, mkStdGen)
@@ -91,13 +92,38 @@ svgPoints (h:t) = Attribute "points" (showPoint h ++ showPoints t)
     showPoint (Vector2 x y) = show x ++ "," ++ show y
     showPoints [] = ""
     showPoints (h:t) =  " " ++ showPoint h ++ showPoints t
+-- svgPoints [Vector2 1.1 1.1, Vector2 2.2 2.2] 'shouldBe'
+-- Attribute "points" "1.1,1.1 2.2,2.2"
+-- Main> svgPoints [Vector2 1.1 1.1, Vector2 2.2 2.2]
+-- Attribute "points" "1.1,1.1 2.2,2.2"
+
+-- Main> svgPoints []
+-- Exception: test.hs:(80,1)-(84,58): Non-exhaustive patterns in function svgPoints
 
 
 polyline :: [Vector2] -> Node
 polyline points = Node "polyline" [svgPoints points] []
+-- polyline [Vector2 1.1 1.1, Vector2 2.2 2.2] 'shouldBe'
+-- Node "polyline" [Attribute "points" "1.1,1.1 2.2,2.2"] []
+
+-- Main> polyline [Vector2 1.1 1.1, Vector2 2.2 2.2]
+-- Node "polyline" [Attribute "points" "1.1,1.1 2.2,2.2"] []
+
+-- *Main> polyline []
+-- Node "polyline" [*** Exception: test.hs:(80,1)-(84,58): Non-exhaustive patterns in function svgPoints
+
+
 
 polygon :: [Vector2] -> Node
 polygon points = Node "polygon" [svgPoints points] []
+-- polygon [Vector2 (-0.50000006) 0.8660254,Vector2 (-0.4999999) (-0.86602545),Vector2 1.0 1.7484555e-7] 'shouldBe'
+-- Node "polygon" [Vector2 (-0.50000006) 0.8660254,Vector2 (-0.4999999) (-0.86602545),Vector2 1.0 1.7484555e-7] []
+
+-- Main> polygon [Vector2 (-0.50000006) 0.8660254,Vector2 (-0.4999999) (-0.86602545),Vector2 1.0 1.7484555e-7]
+-- Node "polygon" [Attribute "points" "-0.50000006,0.8660254 -0.4999999,-0.86602545 1.0,1.7484555e-7"] []
+
+-- Main> polygon []
+-- Node "polygon" [*** Exception: test.hs:(80,1)-(84,58): Non-exhaustive patterns in function svgPoints
 
 
 path :: [Vector2] -> Node
@@ -105,14 +131,39 @@ path points = Node "path" [(Attribute "d" (d "M" points))] []
   where
     d command [] = " Z"
     d command ((Vector2 x y):rest) = command ++ show x ++ " " ++ show y ++ d " L" rest
+-- path [Vector2 1.1 1.1, Vector2 2.2 2.2, Vector2 3.3 3.3] 'shouldBe'
+-- Node "path" [Attribute "d" "M1.1 1.1 L2.2 2.2 L3.3 3.3 Z"] []
+
+-- *Main> path [Vector2 1.1 1.1, Vector2 2.2 2.2, Vector2 3.3 3.3]
+-- Node "path" [Attribute "d" "M1.1 1.1 L2.2 2.2 L3.3 3.3 Z"] []
+
+-- *Main> path []
+-- Node "path" [Attribute "d" " Z"] []
 
 line :: Vector2 -> Vector2 -> Node
 line (Vector2 x1 y1) (Vector2 x2 y2) =
   Node "line" [attr "x1" x1, attr "y1" y1, attr "x2" x2, attr "y2" y2] []
+-- line (Vector2 1.1 1.1) (Vector2 2.2 2.02) 'shouldBe'
+-- Node "line" [Attribute "x1" "1.1",Attribute "y1" "1.1",Attribute "x2" "2.2",Attribute "y2" "2.02"] []
 
+-- *Main> line (Vector2 1.1 1.1) (Vector2 2.2 2.02)
+-- Node "line" [Attribute "x1" "1.1",Attribute "y1" "1.1",Attribute "x2" "2.2",Attribute "y2" "2.02"] []
 
 buildLines :: [Vector2] -> [Node]
 buildLines points = [line one two | (one, two) <- zip points (tail points)]
+-- buildLines [] 'shouldBE' []
+-- buildLines [Vector2 (-0.50000006) 0.8660254,Vector2 (-0.4999999) (-0.86602545),Vector2 1.0 0]
+-- 'shouldBe'
+-- *Main> buildLines [Vector2 (-0.50000006) 0.8660254,Vector2 (-0.4999999) (-0.86602545),Vector2 1.0 0]
+-- [Node "line" [Attribute "x1" "-0.50000006",Attribute "y1" "0.8660254",Attribute "x2" "-0.4999999",Attribute "y2" "-0.86602545"] [],
+-- Node "line" [Attribute "x1" "-0.4999999",Attribute "y1" "-0.86602545",Attribute "x2" "1.0",Attribute "y2" "0.0"] []]
+
+
+-- *Main> buildLines []
+-- []
+-- *Main> buildLines [Vector2 (-0.50000006) 0.8660254,Vector2 (-0.4999999) (-0.86602545),Vector2 1.0 0]
+-- [Node "line" [Attribute "x1" "-0.50000006",Attribute "y1" "0.8660254",Attribute "x2" "-0.4999999",Attribute "y2" "-0.86602545"] [],
+-- Node "line" [Attribute "x1" "-0.4999999",Attribute "y1" "-0.86602545",Attribute "x2" "1.0",Attribute "y2" "0.0"] []]
 
 
 spurs :: Vector2 -> Vector2 -> Node
@@ -124,5 +175,10 @@ spurs origin (Vector2 offsetX offsetY) = polyline points
 rotate :: (Show a, Num a) => a -> Vector2 -> Attribute
 rotate deg (Vector2 centerX centerY) =
   Attribute "transform" ("rotate(" ++ show deg ++ "," ++ show centerX ++ "," ++ show centerY ++ ")")
+
+
+
+
+
 
 
