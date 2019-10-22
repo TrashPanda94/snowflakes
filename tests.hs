@@ -1,4 +1,3 @@
--- Vector2 Test
 import System.IO
 import Control.Monad (replicateM)
 --import System.Random (randomRIO, StdGen, randomR, mkStdGen)
@@ -172,9 +171,19 @@ spurs origin (Vector2 offsetX offsetY) = polyline points
     endpoint x = offset origin (Vector2 (offsetX * x) offsetY)
     points = [endpoint (-1), origin, endpoint 1]
 
+-- spurs (Vector2 1 1) (Vector2 0 1) 'shouldBe'
+-- Node "polyline" [Attribute "points" "1.0,2.0 1.0,1.0 1.0,2.0"] []
+
+-- *Main> spurs (Vector2 1 1) (Vector2 0 1)
+-- Node "polyline" [Attribute "points" "1.0,2.0 1.0,1.0 1.0,2.0"] []
+
+
+
 rotate :: (Show a, Num a) => a -> Vector2 -> Attribute
 rotate deg (Vector2 centerX centerY) =
   Attribute "transform" ("rotate(" ++ show deg ++ "," ++ show centerX ++ "," ++ show centerY ++ ")")
+-- *Main> rotate 3 (Vector2 1 0)
+-- Attribute "transform" "rotate(3,1.0,0.0)"
 
 
 
